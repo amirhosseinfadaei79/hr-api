@@ -4,6 +4,7 @@ import { AppService } from './app.service.js';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { createObserveModule } from '@nestjs/observe';
+import { DepartmentModule } from './module/departments/departments.module.js';
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
 @Module({
@@ -28,6 +29,8 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
       }),
       inject: [ConfigService],
     }),
+    // imports project module
+    DepartmentModule
   ],
   controllers: [AppController],
   providers: [AppService],
