@@ -1,0 +1,106 @@
+import { InjectRepository } from "@nestjs/typeorm";
+import { User } from "./entities/user-entity.js";
+import { Injectable, NotFoundException, UnauthorizedException } from "@nestjs/common";
+import { IsNull, Repository } from "typeorm";
+import { RefreshToken } from "./entities/refresh-token.entity.js";
+import { Role } from "../../shared/enums/user-role.enum.js";
+import * as bcrypt from 'bcrypt'
+import { JwtService } from '@nestjs/jwt'
+import { ConfigService } from "@nestjs/config";
+
+@Injectable()
+export class AuthService {
+    constructor(
+        @InjectRepository(User) private userRepo: Repository<User>,
+        @InjectRepository(RefreshToken) private rtRepo: Repository<RefreshToken>,
+        private jwtService: JwtService,
+        private config: ConfigService
+    ) { }
+
+    async register(mobile: string, password: string, role: Role = Role.EMPLOYEE) {
+        const passwordHashed = await bcrypt.hash(password, 12)
+        const user = this.userRepo.create({ mobile, password: passwordHashed, role })
+        return this.userRepo.save(user)
+    }
+
+    async validateUser(mobile: string, password: string) {
+        const user = await this.userRepo.findOne({ where: { mobile } })
+        if (!user) throw new NotFoundException('کاربری با این شماره موبایل یافت نشد')
+
+        const isPasswordValid = await bcrypt.compare(password, user.password)
+        if (!isPasswordValid) throw new UnauthorizedException('پسورد وارد شده صحیح نیست')
+
+        return user
+    }
+
+    async login(user: User) {
+        const payload = { sub: user.id, role: user.role }
+        // Access token
+        const accessToken = this.jwtService.sign(payload, {
+            secret: this.config.get('JWT_ACCESS_SECRET'),
+            expiresIn: this.config.get('ACCESS_TOKEN_EXPIRE') || '15m'
+        })
+
+        // Refresh token
+        const refreshToken = this.jwtService.sign(
+            { sub: user.id }
+            , {
+                secret: this.config.get('JWT_ACCESS_SECRET'),
+                expiresIn: this.config.get('ACCESS_TOKEN_EXPIRE') || '14d'
+            })
+
+        const tokenHash = await bcrypt.hash(refreshToken, 12)
+        const rt = this.rtRepo.create({ tokenHash, user })
+        await this.rtRepo.save(rt)
+        return {
+            accessToken,
+            refreshToken,
+            user
+        }
+    }
+
+    async refreshToken(userId: number, providedRefreshToken: string) {
+        const tokens = await this.rtRepo.find({
+            where: { user: { id: userId }, revokedAt: IsNull() },
+            relations: { user: true }
+        })
+
+        for (const rt of tokens) {
+            const math = await bcrypt.compare(providedRefreshToken, rt.tokenHash)
+            if (math) {
+                rt.revokedAt = new Date()
+                await this.rtRepo.save(rt)
+
+                const user = rt.user
+                const payload = { sub: user.id, role: user.role }
+                // Access token
+                const newAccessToken = this.jwtService.sign(payload, {
+                    secret: this.config.get('JWT_ACCESS_SECRET'),
+                    expiresIn: this.config.get('ACCESS_TOKEN_EXPIRE') || '15m'
+                })
+                // Refresh token
+                const newRefreshToken = this.jwtService.sign(
+                    { sub: user.id }
+                    , {
+                        secret: this.config.get('JWT_ACCESS_SECRET'),
+                        expiresIn: this.config.get('ACCESS_TOKEN_EXPIRE') || '14d'
+                    })
+                const tokenHash = await bcrypt.hash(newRefreshToken, 12)
+                const rtR = this.rtRepo.create({ tokenHash, user })
+                await this.rtRepo.save(rtR)
+                return {
+                    newAccessToken,
+                    newRefreshToken,
+                }
+            }
+        }
+    }
+
+    async logout(userId: number) {
+        await this.rtRepo.createQueryBuilder()
+            .update(RefreshToken)
+            .set({ revokedAt: () => 'NOW()' })
+            .where('userId = :id', { id: userId })
+            .execute()
+    }
+}
