@@ -5,6 +5,9 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { createObserveModule } from '@nestjs/observe';
 import { DepartmentModule } from './module/departments/departments.module.js';
+import { User } from './module/auth/entities/user-entity.js';
+import { RefreshToken } from './module/auth/entities/refresh-token.entity.js';
+import { AuthModule } from './module/auth/auth.module.js';
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
 @Module({
@@ -24,13 +27,14 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
         username: configService.get('DB_USER', 'root'),
         password: configService.get('DB_PASS', ''),
         database: configService.get('DB_NAME', 'hr_db'),
-        entities: [import.meta.dirname + '/**/*.entity{.ts,.js}'],
+        entities: [User, RefreshToken],
         synchronize: configService.get('DB_SYNCHRONIZE', 'true') === 'true',
       }),
       inject: [ConfigService],
     }),
     // imports project module
-    DepartmentModule
+    DepartmentModule,
+    AuthModule
   ],
   controllers: [AppController],
   providers: [AppService],

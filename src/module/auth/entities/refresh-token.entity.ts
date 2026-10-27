@@ -1,5 +1,6 @@
 import { Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn } from "typeorm";
 import { User } from "./user-entity.js";
+import type { Relation } from "typeorm"; 
 
 @Entity('refresh_token')
 export class RefreshToken {
@@ -13,7 +14,7 @@ export class RefreshToken {
     createdAt: Date
 
     @ManyToOne(() => User, user => user.refreshTokens)
-    user: User 
+    user: Relation<User>
 
     @Column({ type: 'timestamp', nullable: true })
     revokedAt: Date | null

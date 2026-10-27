@@ -45,8 +45,8 @@ export class AuthService {
         const refreshToken = this.jwtService.sign(
             { sub: user.id }
             , {
-                secret: this.config.get('JWT_ACCESS_SECRET'),
-                expiresIn: this.config.get('ACCESS_TOKEN_EXPIRE') || '14d'
+                secret: this.config.get('JWT_REFRESH_SECRET'),
+                expiresIn: this.config.get('REFRESH_TOKEN_EXPIRE') || '14d'
             })
 
         const tokenHash = await bcrypt.hash(refreshToken, 12)
@@ -59,7 +59,16 @@ export class AuthService {
         }
     }
 
-    async refreshToken(userId: number, providedRefreshToken: string) {
+    async refreshToken(providedRefreshToken: string) {
+        let payload: any
+        try {
+            payload = this.jwtService.verify(providedRefreshToken, {
+                secret: this.config.get('JWT_REFRESH_SECRET'),
+            })
+        } catch {
+            throw new UnauthorizedException('Invalid refresh token!')
+        }
+        const userId = payload.sub
         const tokens = await this.rtRepo.find({
             where: { user: { id: userId }, revokedAt: IsNull() },
             relations: { user: true }
@@ -82,8 +91,8 @@ export class AuthService {
                 const newRefreshToken = this.jwtService.sign(
                     { sub: user.id }
                     , {
-                        secret: this.config.get('JWT_ACCESS_SECRET'),
-                        expiresIn: this.config.get('ACCESS_TOKEN_EXPIRE') || '14d'
+                        secret: this.config.get('JWT_REFRESH_SECRET'),
+                        expiresIn: this.config.get('REFRESH_TOKEN_EXPIRE') || '14d'
                     })
                 const tokenHash = await bcrypt.hash(newRefreshToken, 12)
                 const rtR = this.rtRepo.create({ tokenHash, user })
@@ -102,5 +111,11 @@ export class AuthService {
             .set({ revokedAt: () => 'NOW()' })
             .where('userId = :id', { id: userId })
             .execute()
+    }
+
+    async findUserById(userId: number) {
+        const user = this.userRepo.findOne({ where: { id: userId } })
+        if (!user) throw new NotFoundException('کاربر مورد نظر یافت نشد!')
+        return user
     }
 }
