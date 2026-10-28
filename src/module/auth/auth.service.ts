@@ -1,6 +1,6 @@
 import { InjectRepository } from "@nestjs/typeorm";
 import { User } from "./entities/user-entity.js";
-import { Injectable, NotFoundException, UnauthorizedException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException, UnauthorizedException } from "@nestjs/common";
 import { IsNull, Repository } from "typeorm";
 import { RefreshToken } from "./entities/refresh-token.entity.js";
 import { Role } from "../../shared/enums/user-role.enum.js";
@@ -18,6 +18,8 @@ export class AuthService {
     ) { }
 
     async register(mobile: string, password: string, role: Role = Role.EMPLOYEE) {
+        const isAlredyExistMobile = await this.findUserByMobile(mobile)
+        if (isAlredyExistMobile) throw new BadRequestException('شماره موبایل از قبل وجود دارد')
         const passwordHashed = await bcrypt.hash(password, 12)
         const user = this.userRepo.create({ mobile, password: passwordHashed, role })
         return this.userRepo.save(user)
@@ -118,4 +120,11 @@ export class AuthService {
         if (!user) throw new NotFoundException('کاربر مورد نظر یافت نشد!')
         return user
     }
+
+    async findUserByMobile(mobile: string) {
+        const user = this.userRepo.findOne({ where: { mobile } })
+        if (!user) return false
+        return user
+    }
+
 }
